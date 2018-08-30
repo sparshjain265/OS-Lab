@@ -1,0 +1,49 @@
+loadi(65, 7);	//load init program to memory 
+loadi(66, 8);	
+
+loadi(22, 35);	//load INT10 program to memory - exit
+loadi(23, 36);
+
+loadi(2, 15);	//load exception handler to memory
+loadi(3, 16);
+
+PTBR = PAGE_TABLE_BASE;	
+PTLR = 10;
+
+//set page table
+//[PTBR + 0] = 65;
+//[PTBR + 1] = "0100";
+//[PTBR + 2] = 66;
+//[PTBR + 3] = "0100";
+//[PTBR + 4] = 76;
+//[PTBR + 5] = "0110";
+
+[PTBR + 0] = -1;
+[PTBR + 1] = "0000";
+[PTBR + 2] = -1;
+[PTBR + 3] = "0000";
+[PTBR + 4] = -1;
+[PTBR + 5] = "0000";
+[PTBR + 6] = -1;
+[PTBR + 7] = "0000";
+[PTBR + 8] = 65;		
+[PTBR + 9] = "0100";
+[PTBR + 10] = 66;
+[PTBR + 11] = "0100";
+[PTBR + 12] = -1;
+[PTBR + 13] = "0000";
+[PTBR + 14] = -1;
+[PTBR + 15] = "0000";
+[PTBR + 16] = 76;
+[PTBR + 17] = "0110";
+[PTBR + 18] = -1;
+[PTBR + 19] = "0000";
+
+//set stack for init
+[76*512] = 4 * 512;
+SP = 8 * 512;
+
+//breakpoint;
+
+//transfer control to user program
+ireturn;
