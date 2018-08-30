@@ -1,0 +1,42 @@
+//Set Mode Flag in Process Table
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE]*16 + 9] = 5;
+
+alias userSP R0;
+userSP = SP;
+
+//Switch the stack from user to kernel
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)] = SP;
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 11)]*512 - 1;
+
+//Translate logical address to physical address
+alias PhysicalPageNum R1;
+alias Offset R2;
+alias PhysicalAddr R3;
+PhysicalPageNum = [PTBR + 2*((userSP - 4)/512)];
+Offset = (userSP - 4)%512;
+PhysicalAddr = PhysicalPageNum*512 + Offset;
+alias fileDescriptor R4;
+fileDescriptor = [PhysicalAddr];
+
+//Check whether fileDescriptor is valid
+if(fileDescriptor != -2)
+then
+	alias RetAddr R5;
+	RetAddr = ([PTBR + 2*((userSP - 1)/512)]*512) + ((userSP - 1)%512);
+	[RetAddr] = -1;
+else
+	alias word R5;
+	word = [[PTBR + 2*((userSP - 3)/512)]*512 + ((userSP - 3)%512)];
+	print word;
+	alias RetAddr R6;
+	RetAddr = ([PTBR + 2*((userSP - 1)/512)]*512) + ((userSP - 1)%512);
+	[RetAddr] = 0;
+endif;
+
+//set SP back to userSP
+SP = userSP;
+
+//Set Mode Flag back to 0 ie user mode
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE]*16 + 9] = 0;
+
+ireturn;
