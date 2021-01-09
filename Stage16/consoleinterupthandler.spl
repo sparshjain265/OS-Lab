@@ -1,0 +1,21 @@
+//Switch the stack from user to kernel and backup the data
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)] = SP;
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 11)]*512 - 1;
+backup;
+
+//Put data from terminal to buffer
+alias reqPID R0;
+reqPID = [TERMINAL_STATUS_TABLE + 1];
+[PROCESS_TABLE + reqPID*16 + 8] = P0;
+
+//Release terminal
+multipush(R0);
+R1 = 9;
+R2 = reqPID;
+call MOD_0;
+multipop(R0);
+
+//Switch back to user context
+restore;																					//restore user data
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)];				//Set SP back to user SP
+ireturn;

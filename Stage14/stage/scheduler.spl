@@ -1,0 +1,63 @@
+alias currentPID R0;
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+
+//Push BP
+SP = SP + 1;
+[SP] = BP;
+
+alias process_table_entry R1;
+process_table_entry = PROCESS_TABLE + currentPID*16;
+
+[process_table_entry + 12] = SP % 512;		//Update KPTR entry (offset) in process table 
+[process_table_entry + 14] = PTBR;
+[process_table_entry + 15] = PTLR;
+
+alias newPID R2;
+newPID = currentPID;
+alias count R10;
+count = 0;
+while (1) do
+	newPID = (newPID + 1) % 16;
+	if	(newPID == 0) then						//ignore the idle process
+		newPID = 1;
+	endif;
+	count = count + 1;
+	if(count > 15 ) then							//if all 15 processes are not available, schedule idle process
+		newPID = 0;
+	endif;
+
+	//if a process is ready or created, schedule it and break out of the loop
+	if ([PROCESS_TABLE + newPID*16 + 4] == READY) then
+		[PROCESS_TABLE + newPID*16 + 4] = RUNNING;
+		break;
+	endif;
+	if ([PROCESS_TABLE + newPID*16 + 4] == CREATED) then
+		break;
+	endif;
+endwhile;
+
+alias new_process_table R3;
+new_process_table = PROCESS_TABLE + newPID * 16;
+
+//Set back Kernel SP, PTBR , PTLR for new process
+SP =  [new_process_table + 11] * 512 + [new_process_table + 12] ;
+PTBR = [new_process_table + 14];
+PTLR = [new_process_table + 15];
+
+//Update System Status Table 
+[SYSTEM_STATUS_TABLE + 1] = newPID;
+
+//if the newly scheduled process is running for the first time, do this
+if([new_process_table + 4] == CREATED) then
+	[new_process_table + 4] = RUNNING;
+	SP = [new_process_table + 13];
+	[new_process_table + 9] = 0;				//Set mode flag to 0
+	ireturn;
+endif;
+
+//otherwise do this
+[new_process_table + 4] = RUNNING;
+//POP BP;
+BP = [SP];
+SP = SP - 1;
+return;

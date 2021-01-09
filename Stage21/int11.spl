@@ -1,0 +1,92 @@
+alias userSP R0;
+userSP=SP;
+
+alias currentPID R1;
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+
+alias currentProcessTable R2;
+currentProcessTable = PROCESS_TABLE + currentPID * 16;
+
+//change to kernel stack
+[currentProcessTable + 13] = SP;
+SP = [currentProcessTable + 11]*512 - 1;
+
+//userSP - 1 for return value, -2,3,4 for arguments, -5 for system call number
+alias syscallNum R3;
+syscallNum = [[PTBR + 2 * ((userSP - 5) / 512)] * 512 + (userSP - 5) % 512];
+
+//implement system calls
+//set mode flag
+[currentProcessTable + 9] = syscallNum; 
+
+//get retAdd
+alias retAdd R4;
+retAdd = [PTBR + 2*((userSP - 1)/512)]*512 + (userSP - 1)%512;
+
+//get pid
+if(syscallNum == 11) then
+	[retAdd] = currentPID;
+	//change back to user stack and mode to user mode then return
+	SP = userSP;
+	[currentProcessTable + 9] = 0;
+	ireturn;
+endif;
+
+//get ppid
+if(syscallNum == 12) then
+	[retAdd] = [currentProcessTable + 2];
+	//change back to user stack and mode to user mode then return
+	SP = userSP;
+	[currentProcessTable + 9] = 0;
+	ireturn;
+endif;
+
+//wait system call
+if(syscallNum == 13) then
+	
+	//get PID
+	alias PID R5;
+	PID = [[PTBR + 2 * ((userSP - 4) / 512)] * 512 + (userSP - 4) % 512];
+
+	if(PID > 0 && PID < 20 && PID != [SYSTEM_STATUS_TABLE + 1] && [PROCESS_TABLE + PID*16 + 4] != TERMINATED ) then
+		//valid condition
+		[currentProcessTable + 4] = WAIT_PROCESS;
+		[currentProcessTable + 5] = PID;
+		multipush(R0, R1, R2, R3, R4, R5);
+		call MOD_5;
+		multipop(R0, R1, R3, R4, R5);
+		[retAdd] = 0;
+	else
+		//invalid condition, fail
+		[retAdd] = -1;
+	endif;
+
+	//change back to user stack and mode to user mode then return
+	SP = userSP;
+	[currentProcessTable + 9] = 0;
+	ireturn;
+
+endif;
+
+//signal system call
+if(syscallNum == 14) then
+	alias count R5;
+	count = 0;
+	while(count < 16) do
+		if([PROCESS_TABLE + count*16 + 4] == WAIT_PROCESS && [PROCESS_TABLE + count*16 + 5] == currentPID) then
+			[PROCESS_TABLE + count*16 + 4] = READY;
+		endif;
+		count = count + 1;
+	endwhile;
+	[retAdd] = 0;
+	
+	//change back to user stack and mode to user mode then return
+	SP = userSP;
+	[currentProcessTable + 9] = 0;
+	ireturn;
+endif;
+
+//change back to user stack and mode to user mode then return
+SP = userSP;
+[currentProcessTable + 9] = 0;
+ireturn;

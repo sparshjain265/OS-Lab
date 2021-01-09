@@ -1,0 +1,22 @@
+//Switch the stack from user to kernel and backup the data
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)] = SP;
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 11)]*512 - 1;
+backup;
+
+//free the disk
+[DISK_STATUS_TABLE + 0] = 0;
+
+//Ready all the waiting for disk processes
+alias count R10;
+count = 0;
+while(count < 16) do
+	if([PROCESS_TABLE + count*16 + 4] == WAIT_DISK) then
+		[PROCESS_TABLE + count*16 + 4] = READY;
+	endif;
+	count = count + 1;
+endwhile;
+
+//Switch back to user context
+restore;																					//restore user data
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)];				//Set SP back to user SP
+ireturn;

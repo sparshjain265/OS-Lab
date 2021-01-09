@@ -1,0 +1,137 @@
+//Set Mode Flag in Process Table
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1]*16 + 9] = 9;
+
+alias userSP R0;
+userSP=SP;
+
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)] = SP; 			//Storing the user stack pointter
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 11)]*512 - 1;	//Set SP to beginning of kernel stack
+
+alias fileName R1;																	//Get fileName from user stack
+fileName = [[PTBR + 2*((userSP - 2)/512)]*512 + (userSP - 2)%512];
+
+//search for file 
+alias i R2;
+i = 0;
+while (i < 60) do
+	if(fileName == [INODE_TABLE + i*16 + 1] && [INODE_TABLE + i*16] == EXEC) then
+		break;
+	endif;
+	i = i + 1;
+endwhile;
+
+//check if found
+if(i == 60) then
+	//return -1
+	alias retAdd R3;
+	retAdd = ([PTBR + 2*((userSP - 1)/512)]*512 + (userSP - 1)%512);
+	[retAdd] = -1;
+	//Set Mode Flag in Process Table, set SP, and return to user
+	[PROCESS_TABLE + [SYSTEM_STATUS_TABLE]*16 + 9] = 0;
+	SP = userSP;
+	ireturn;
+endif;
+
+//call exit process
+multipush(R0, R1, R2, R3);
+R1 = 3;
+R2 = [SYSTEM_STATUS_TABLE + 1];
+call MOD_1;
+multipop(R0, R1, R2, R3);
+
+//Get user area page number
+alias userArea R4;
+userArea = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 11)];
+
+//Reclaim the page
+[MEMORY_FREE_LIST + userArea] = [MEMORY_FREE_LIST + userArea] + 1;
+[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1;
+
+//Set per process resource Table (last 16 words to be -1)
+alias count R10;
+count = 1;
+while (count <= 16) do
+	[(userArea + 1)*512 - count] = -1;
+	count = count + 1;
+endwhile;
+
+//Set SP for the new process
+SP = userArea*512 - 1;
+
+//Set the state to running
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1]*16 + 4] = RUNNING;
+//Set inode index
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1]*16 + 7] = i;
+
+//Set Page Table Entries
+[PTBR + 0] = 63;		//Library
+[PTBR + 1] = "0100";
+[PTBR + 2] = 64;
+[PTBR + 3] = "0100";
+
+//Invalidate entries for heap (will be assigned free pages if demanded)
+[PTBR + 4] = -1;		//Heap1
+[PTBR + 5] = "0000";
+[PTBR + 6] = -1;		//Heap2
+[PTBR + 7] = "0000";
+
+//Get free pages and allocate 2 stack pages
+multipush(R0, R1, R2, R3, R4);
+R1 = 1;
+R2 = [SYSTEM_STATUS_TABLE + 1];
+call MOD_2;
+
+[PTBR + 16] = R0;		//Stack1
+[PTBR + 17] = "0110";
+
+R1 = 1;
+R2 = [SYSTEM_STATUS_TABLE + 1];
+call MOD_2;
+
+[PTBR + 18] = R0;		//Stack2
+[PTBR + 19] = "0110";
+
+multipop(R0, R1, R2, R3, R4);
+
+//Allocate first code page
+
+//call get code page
+multipush(R0, R1, R2, R3, R4);
+R1 = 5;
+R2 = [INODE_TABLE + i*16 + 8];
+call MOD_2;
+R5 = R0;
+multipop(R0, R1, R2, R3, R4);
+
+[PTBR + 8] = R5;
+[PTBR + 9] = "0100";
+
+//Invalidate rest code pages (load when demanded)
+[PTBR + 10] = -1;
+[PTBR + 11] = "0000";
+[PTBR + 12] = -1;
+[PTBR + 13] = "0000";
+[PTBR + 14] = -1;
+[PTBR + 15] = "0000";
+
+alias currentPID R5;
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+//Set Disk Map Entries
+[DISK_MAP_TABLE + currentPID*10 + 0] = -1;									//user area in Disk
+[DISK_MAP_TABLE + currentPID*10 + 1] = -1;									//unused
+[DISK_MAP_TABLE + currentPID*10 + 2] = -1;									//Heap1 in Disk
+[DISK_MAP_TABLE + currentPID*10 + 3] = -1;									//Heap2 in Disk
+[DISK_MAP_TABLE + currentPID*10 + 4] = [INODE_TABLE + i*16 + 8 + 0];	//Code1 in Disk
+[DISK_MAP_TABLE + currentPID*10 + 5] = [INODE_TABLE + i*16 + 8 + 1];	//Code2 in Disk
+[DISK_MAP_TABLE + currentPID*10 + 6] = [INODE_TABLE + i*16 + 8 + 2];	//Code3 in Disk
+[DISK_MAP_TABLE + currentPID*10 + 7] = [INODE_TABLE + i*16 + 8 + 3];	//Code4 in Disk
+[DISK_MAP_TABLE + currentPID*10 + 8] = -1;									//Stack1 in Disk
+[DISK_MAP_TABLE + currentPID*10 + 9] = -1;									//Stack2 in Disk
+
+//Store the entry point and change stack pointer
+[[PTBR + 16]*512] = [[PTBR + 8]*512 + 1];
+SP = 8*512;
+
+//change Mode and return to user process
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1]*16 + 9] = 0;
+ireturn;

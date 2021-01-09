@@ -1,0 +1,34 @@
+decl
+	int n, a[10], i, j, t;
+enddecl
+
+int main()
+{
+	begin
+		read(n);
+		i = 0;
+		while(i < n) do
+			read(a[i]);
+			i = i + 1;
+		endwhile;
+		i = 0;
+		while(i < n) do
+			j = i + 1;
+			while(j < n) do
+				if(a[i] > a[j]) then
+					t = a[i];
+					a[i] = a[j];
+					a[j] = t;
+				endif;
+				j = j + 1;
+			endwhile;
+			i = i + 1;
+		endwhile;
+		i = 0;
+		while(i < n) do
+			write(a[i]);
+			i = i + 1;
+		endwhile;
+		return 0;
+	end
+}

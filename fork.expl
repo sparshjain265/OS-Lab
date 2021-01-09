@@ -1,0 +1,14 @@
+int main()
+{
+decl
+	int t;
+enddecl
+begin
+	t = exposcall("Fork");
+	if (t == 0) then
+		t = exposcall("Exec", "odd.xsm");
+	endif;
+	t = exposcall("Exec", "even.xsm");
+	return 0;
+end
+}

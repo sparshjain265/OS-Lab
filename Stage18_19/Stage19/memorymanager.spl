@@ -1,0 +1,107 @@
+alias functionNum R1;
+alias argument R2;
+alias argument2 R3;
+
+//Get Free Page
+if(functionNum == 1) then
+	//increment wait mem count
+	[SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] + 1;
+
+	//while memory is full
+	while([SYSTEM_STATUS_TABLE + 2] 	== 0) do
+		[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1]*16 + 4] = WAIT_MEM;
+		multipush(R1, R2);
+		call MOD_5;
+		multipop(R1, R2);
+	endwhile;
+
+	//Decrement wait mem count and free mem count
+	[SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] - 1;
+	[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1;
+
+	//Get a free Page
+	alias i R0;
+	i = 76;
+	while(i < 128) do
+		if([MEMORY_FREE_LIST + i] == 0) then
+			[MEMORY_FREE_LIST + i] = 1;
+			break;
+		endif; 
+		i = i + 1;
+	endwhile;
+	return;
+endif;
+
+//Release Page
+if(functionNum == 2) then
+	//Decrement entry in MEMORY_FREE_LIST
+	[MEMORY_FREE_LIST + argument] = [MEMORY_FREE_LIST + argument] - 1;
+	
+	//If page is free, update free mem count
+	if([MEMORY_FREE_LIST + argument] == 0) then
+		[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] + 1;
+	endif;
+
+	//Ready all the processes waiting for free mem page
+	alias i R3;
+	i = 0;
+	while(i < 16) do
+		if([PROCESS_TABLE + i*16 + 4] == WAIT_MEM) then
+			[PROCESS_TABLE + i*16 + 4] = READY;
+		endif;
+		i = i + 1;
+	endwhile;
+	return;
+endif;
+
+//Release block
+if(functionNum == 4) then
+	[DISK_FREE_LIST + argument] = [DISK_FREE_LIST + argument] - 1;
+	return;
+endif;
+
+//Get Code Page
+if(functionNum == 5) then
+	alias count R10;
+	count = 0;
+	//check if given block is already present
+	while(count < 16) do
+		alias i R9;
+		i = 0;
+		while(i < 4) do
+			//if the given block number is present and corresponding page table entry is valid
+			if([DISK_MAP_TABLE + count*10 + 4 + i] == argument) then
+				//check for corresponding page table entry
+				if([[PROCESS_TABLE + 14] + 8 + 2*i + 1] == "0100") then
+					//return the corresponding page (already in memory)
+					R0 = [[PROCESS_TABLE + 14] + 8 + 2*i];
+					//increment memory free list of corresponding page
+					[MEMORY_FREE_LIST + R0] = [MEMORY_FREE_LIST + R0] + 1;
+					return;
+				endif;
+			endif;
+			i = i + 1;
+		endwhile;
+		count = count + 1;
+	endwhile;
+
+	//if not in memory
+
+	//get free page
+	multipush(R1, R2, R10, R9);
+	R1 = 1;
+	call MOD_2;
+	multipop(R1, R2, R10, R9);
+	
+	//disk load
+	multipush(R0, R1, R2, R10, R9);
+	R1 = 2;
+	R3 = R0;
+	R4 = argument;
+	R2 = [SYSTEM_STATUS_TABLE + 1];
+	call MOD_4;
+	multipop(R0, R1, R2, R10, R9);
+	return;
+endif;
+
+return;

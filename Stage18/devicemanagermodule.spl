@@ -1,0 +1,73 @@
+alias functionNum R1;
+alias currentPID R2;
+alias pageNum R3;
+alias blockNum R4;
+
+//Disk Load
+if(functionNum == 2) then
+	//Acquire Disk
+	multipush(R1, R2, R3, R4);	
+	R1 = 3;
+	R2 = currentPID;
+	call MOD_0;
+	multipop(R1, R2, R3, R4);
+
+	[DISK_STATUS_TABLE + 1] = 0;			//Load/Store bit
+	[DISK_STATUS_TABLE + 2] = pageNum;
+	[DISK_STATUS_TABLE + 3] = blockNum;
+
+	load(pageNum, blockNum);
+
+	[PROCESS_TABLE + currentPID*16 + 4] = WAIT_DISK;
+
+	//Call Scheduler
+	multipush(R1, R2, R3, R4);
+	call MOD_5;
+	multipop(R1, R2, R3, R4);
+
+endif;
+
+//Print to Terminal
+if(functionNum == 3) then
+	//Acquire Terminal
+	multipush(R1, R2, R3);	//Push registers
+	R1 = 8;					//Function 8
+	R2 = currentPID;		//Current PID
+	call MOD_0;				//Call module 0
+	multipop(R1, R2, R3);		//Pop Registers
+	
+	print R3;				//print the word
+
+	//Release Terminal
+	multipush(R1, R2, R3);
+	R1 = 9;
+	R2 = currentPID;
+	call MOD_0;
+	multipop(R1, R2, R3);
+endif;
+
+//Read from Terminal
+if(functionNum == 4) then
+	//Acquire Terminal
+	multipush(R1, R2, R3);	//Push registers
+	R1 = 8;					//Function 8
+	R2 = currentPID;		//Current PID
+	call MOD_0;				//Call module 0
+	multipop(R1, R2, R3);		//Pop Registers
+
+	read;						//read
+
+	//Set state as WAIT_TERMINAL
+	[PROCESS_TABLE + currentPID*16 + 4] = WAIT_TERMINAL;
+
+	//Call Scheduler
+	multipush(R1, R2, R3);	//Push Registers
+	call MOD_5;					//Call Scheduler
+	multipop(R1, R2, R3);	//Pop Registers
+
+	alias PhysicalWordAdd R4;
+	PhysicalWordAdd = ([PTBR + 2*([R3]/512)]*512 + [R3]%512);	//Get physical address
+	[PhysicalWordAdd] = [PROCESS_TABLE + currentPID*16 + 8];		//Save from input buffer
+endif;
+
+return;

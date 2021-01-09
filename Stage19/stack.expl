@@ -1,0 +1,63 @@
+type
+	List
+	{
+		int a;
+		List next;
+	}
+endtype
+
+decl
+	List T;
+	int insert(integer a);
+	int print();				  
+enddecl
+
+int insert(int a)
+{
+	decl
+		List new;
+	enddecl
+	begin
+		new = alloc();
+		new.a = a;
+		if(T == null) then
+			T=new;
+			new.next = null;
+		else
+			new.next = T;
+			T = new;
+		endif;
+		return 0;
+	end
+}
+
+int print()
+{
+	begin
+		while(T!=null) do
+			write(T.a);
+			T=T.next;
+		endwhile;
+		return 0;
+	end
+}
+
+
+int main()
+{	
+	decl
+		int n, t;
+	enddecl
+	begin
+		t = initialize();
+		T = null;
+		read(n);
+		while(n > 0) do
+			read(t);
+			t = insert(t);
+			n = n - 1;
+		endwhile;
+		t = print();
+		return 0;
+	end
+}

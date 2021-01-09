@@ -1,0 +1,136 @@
+//Set Mode Flag in Process Table to system call number
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1]*16 + 9] = 8;
+
+alias parentSP R6;
+parentSP = SP;
+
+alias parentPID R9;
+R9 = [SYSTEM_STATUS_TABLE + 1];
+
+//switch to kernel stack
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)] = SP; 			//Storing the user stack pointter
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 11)]*512 - 1;	//Set SP to beginning of kernel stack
+
+//Get PCB Entry
+multipush(R6, R9);
+R1 = 1;
+call MOD_1;
+alias childPID R7;
+childPID = R0;
+multipop(R6, R9);
+
+alias retAdd R8;
+retAdd = [PTBR + 2*((parentSP - 1)/512)]*512 + (parentSP - 1)%512;
+
+//if no free PCB entry is found
+if(childPID == -1) then
+	[retAdd] = childPID;
+	[PROCESS_TABLE + parentPID*16 + 9] = 0;
+	SP = parentSP;
+	ireturn;
+endif;
+
+//Get free pages and allocate 2 stack pages and a user area page
+multipush(R6, R7, R8, R9);
+R1 = 1;
+R2 = [SYSTEM_STATUS_TABLE + 1];
+call MOD_2;
+
+alias stack1 R11;
+stack1 = R0;		//Stack1
+
+R1 = 1;
+R2 = [SYSTEM_STATUS_TABLE + 1];
+call MOD_2;
+
+alias stack2 R12;
+stack2 = R0;		//Stack2
+
+R1 = 1;
+R2 = [SYSTEM_STATUS_TABLE + 1];
+call MOD_2;
+
+[PROCESS_TABLE + childPID*16 + 11] = R0;	//user area page
+
+multipop(R6, R7, R8, R9);
+
+//copy the userID from parent
+[PROCESS_TABLE + childPID*16 + 3] = [PROCESS_TABLE + parentPID*16 + 3];
+
+//copy swap flag and user area swap status
+[PROCESS_TABLE + childPID*16 + 6] = [PROCESS_TABLE + parentPID*16 + 6];
+[PROCESS_TABLE + childPID*16 + 10] = [PROCESS_TABLE + parentPID*16 + 10];
+
+//copy inode index
+[PROCESS_TABLE + childPID*16 + 7] = [PROCESS_TABLE + parentPID*16 + 7];
+
+//UPTR
+[PROCESS_TABLE + childPID*16 + 13] = [PROCESS_TABLE + parentPID*16 + 13];
+
+//Set MODE, KPTR, TICK to 0
+[PROCESS_TABLE + childPID*16 + 0] = 0;
+[PROCESS_TABLE + childPID*16 + 9] = 0;
+[PROCESS_TABLE + childPID*16 + 12] = 0;
+
+//Set PPID 
+[PROCESS_TABLE + childPID*16 + 2] = parentPID;
+
+//Set State to created
+[PROCESS_TABLE + childPID*16 + 4] = CREATED;
+
+//Copy disk map table
+alias count R10;
+count = 0;
+while (count < 10) do
+	[DISK_MAP_TABLE + 10 * childPID + count] = [DISK_MAP_TABLE + 10 * parentPID + count];
+	count = count + 1;
+endwhile;
+
+//Copy page table from parent and update the entry for new stack pages in the page table
+count = 0;
+while (count < 20) do
+	[PAGE_TABLE_BASE + childPID*20 + count] = [PAGE_TABLE_BASE + parentPID*20 + count];
+	count = count + 1;
+endwhile;
+[PAGE_TABLE_BASE + childPID*20 + 16] = stack1;											//Stack
+[PAGE_TABLE_BASE + childPID*20 + 18] = stack2;
+
+//Increment memory free list count for shared pages
+count = 0;
+while (count < 8) do
+	[MEMORY_FREE_LIST + [PAGE_TABLE_BASE + childPID*20 + count*2]] = [MEMORY_FREE_LIST + [PAGE_TABLE_BASE + childPID*20 + count*2]] + 1;
+	count = count + 1;
+endwhile;
+
+//Copy contents of stack page 1
+alias pstack R13;
+pstack = [PAGE_TABLE_BASE + parentPID*20 + 16];
+count = 0;
+while (count < 512) do
+	[stack1*512 + count] = [pstack*512 + count];
+	count = count + 1;
+endwhile;
+
+//Copy contents of stack page 2
+pstack = [PAGE_TABLE_BASE + parentPID*20 + 18];
+count = 0;
+while (count < 512) do
+	[stack2*512 + count] = [pstack*512 + count];
+	count = count + 1;
+endwhile;
+
+//Push [BP] on top of kernel stack of child Process
+[[PROCESS_TABLE + childPID*16 + 11]*512] = BP;
+
+//Return Value of parent process
+[retAdd] = childPID;
+
+//Return Value of child process
+alias childSP R14;
+childSP = [PROCESS_TABLE + childPID*16 + 13];
+retAdd = [PTBR + 2*((childSP - 1)/512)]*512 + (childSP - 1)%512;
+[retAdd] = 0;
+
+[PROCESS_TABLE + parentPID*16 + 9] = 0;
+SP = parentSP;
+ireturn;

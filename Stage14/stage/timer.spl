@@ -1,0 +1,33 @@
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)] = SP; 			//Storing the user stack pointter
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 11)]*512 - 1;	//Set SP to beginning of kernel stack
+backup;
+
+breakpoint;
+
+alias currentPID R0;
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+
+alias process_table_entry R1;
+process_table_entry = PROCESS_TABLE + currentPID*16;
+
+[process_table_entry + 4] = READY;			//State = READY
+
+alias count R11;
+count = 0;
+while (count < 16) do
+	[PROCESS_TABLE + count*16 + 0] = [PROCESS_TABLE + count*16 + 0] + 1;
+	count = count + 1;
+endwhile;
+
+call MOD_5; //call the scheduler
+
+alias newPID R2;					//new PID is stored in R2 by scheduler
+alias new_process_table R3;	//new process table stored in R3 by scheduler
+
+//restore user data
+//Set SP to top of user stack and run it
+
+restore;																					//restore user data
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)];				//Set SP back to user SP
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 9)] = 0;				//Set mode flag to 0
+ireturn;

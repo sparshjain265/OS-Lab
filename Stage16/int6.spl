@@ -1,0 +1,43 @@
+//Set Mode Flag in Process Table
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE]*16 + 9] = 7;
+
+alias userSP R0;
+userSP=SP;
+
+//Switch the stack from user to kernel
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)] = SP;
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 11)]*512 - 1;
+
+alias fileDescriptor R1;
+fileDescriptor = [[PTBR + 2*((userSP - 4)/512)]*512 + (userSP - 4)%512];
+
+//If fileDescriptor is invalid
+if(fileDescriptor != -1)
+then
+	//Return -1
+	alias RetAddr R2;
+	RetAddr = ([PTBR + 2*((userSP - 1)/512)]*512) + ((userSP - 1)%512);
+	[RetAddr] = -1;	
+else
+	//Get address of the word
+	alias wordAdd R3;
+	wordAdd = ([PTBR + 2*((userSP - 3)/512)]*512 + ((userSP - 3)%512));
+
+	multipush(R0, R1, R2, R3);			//push all registers
+	R1 = 4;									//Terminal Read Function Call number
+	R2 = [SYSTEM_STATUS_TABLE + 1]; 	//currentPID
+	R3 = wordAdd;							//word address
+	call MOD_4;								//call module 4
+	multipop(R0, R1, R2, R3);			//pop the registers
+
+	alias RetAddr R2;
+	RetAddr = ([PTBR + 2*((userSP - 1)/512)]*512) + ((userSP - 1)%512);
+	[RetAddr] = 0;							//Return 0
+endif;
+
+//Set Mode Flag in Process Table
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE]*16 + 9] = 0;
+
+SP = userSP;	//reset to userSP
+
+ireturn;

@@ -1,0 +1,69 @@
+//Set Mode Flag in Process Table
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1]*16 + 9] = -1;
+
+alias userSP R0;
+userSP=SP;
+
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)] = SP; 			//Storing the user stack pointter
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 11)]*512 - 1;	//Set SP to beginning of kernel stack
+backup;
+
+multipush(EIP);
+
+//if not page fault, print relevant error message
+if(EC != 0 || userSP == PTLR*512 - 1) then
+	R1 = 3;
+	R2 = [SYSTEM_STATUS_TABLE + 1];
+	if(EC != 0) then
+		R3 = EC;
+	else
+		R3 = "out of bounds";
+	endif;
+
+	//Exit the Process
+	R1 = 3;
+	R2 = [SYSTEM_STATUS_TABLE + 1];
+	call MOD_1;
+
+	//Call Scheduler
+	call MOD_5;
+
+endif;
+
+//if exception is caused due to code page
+if(EPN > 3 && EPN < 8) then
+	//Get code page
+	R1 = 5;
+	R2 = [DISK_MAP_TABLE + EPN];
+	call MOD_2;
+
+	[PTBR + EPN*2] = R0;
+	[PTBR + EPN*2 + 1] = "1100";
+
+endif;
+
+//if exception is caused by heap page
+if(EPN > 1 && EPN < 4) then
+	//Get free page
+	R1 = 1;
+	call MOD_2;
+
+	[PTBR + EPN*2] = R0;
+	[PTBR + EPN*2 + 1] = "1110";
+
+endif;
+
+//reset mode Flag
+[PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1]*16 + 9] = 0;
+
+multipop(EIP);
+
+restore;
+
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]*16 + 13)];
+
+SP = SP + 1;
+
+[[PTBR + 2*(SP/512)]*512 + SP%512] = EIP;
+
+ireturn;
